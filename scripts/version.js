@@ -2,12 +2,12 @@
 
 // TODO : change repo name.
 const repo_name = "template";
-
+const owner = "aminchb";
 
 // CONSTS :
-const website_url = `https://user.github.io/${repo_name}/`;
-const deployments_url = `https://github.com/user/${repo_name}/deployments`;
-const apiUrl = `https://api.github.com/repos/user/${repo_name}/commits`;
+const website_url = `https://${owner}.github.io/${repo_name}/`;
+const deployments_url = `https://github.com/${owner}/${repo_name}/deployments`;
+const apiUrl = `https://api.github.com/repos/${owner}/${repo_name}/commits`;
 
 
 // METHODS : ..............
