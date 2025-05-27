@@ -1,0 +1,64 @@
+/* GLOBAL VARIABLES */
+:root{
+    --main-color: #dde2e7;
+    --sub-color : #eee;
+    --text-color : black;
+    --navbar-style : italic;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+/* WHOLE PAGE TEXT COLOR */
+* {
+    margin: 0px;
+    padding: 0px;
+    font-family: Arial, sans-serif;
+    text-decoration: none;
+    box-shadow: none;
+    border: none;
+
+    color: var(--text-color);
+}
+
+.show {
+    display: flex;
+}
+
+.hidden {
+    display: none;
+}
+
+/* PAGE BACKGROUND COLOR */
+body {
+    height: 100vh;
+    background: linear-gradient(to bottom, var(--main-color), var(--sub-color), var(--main-color));
+
+}
+
+body > * {
+    padding : 10px;
+}
+
+/* NAVBAR STYLE */
+nav {
+    font-style: var(--navbar-style);
+}
+
+.logo-text {
+    display: flex;
+}
+
+.logo {
+    height: 30px;
+    margin-right: 5px;
+}
+
+main {
+    height: calc(100vh - 70px);
+    display: flex;   
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
