@@ -1,0 +1,14 @@
+{
+  "repo": {
+    "owner": "aminchb",
+    "name": "template"
+  },
+  "theme": {
+    "mainColor": "#dde2e7",
+    "subColor": "#eee",
+    "textColor": "black",
+    "navbarStyle": "italic"
+  },
+  "version": "2.0.0",
+  "comment": "new settings.json file"
+}

@@ -3,15 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- WINDOW TITLE -->
+
+    <!-- WINDOW TITLE (mis à jour par config.js depuis settings.json) -->
     <title>TEMPLATE</title>
-    
+
     <!-- WINDOW ICON -->
-    <link rel="icon" href="img/logo.ico" type="image/x-icon">
-    
-    <!-- STYLES -->
-    <link rel="stylesheet" href="styles/theme.css">
+    <link rel="icon" href="logo.ico" type="image/x-icon">
+
+    <!-- THEME (inline, les valeurs par défaut sont écrasées par settings.json au chargement) -->
+    <style>
+        :root{
+            --main-color: #dde2e7;
+            --sub-color : #eee;
+            --text-color : black;
+            --navbar-style : italic;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        * {
+            margin: 0px;
+            padding: 0px;
+            font-family: Arial, sans-serif;
+            text-decoration: none;
+            box-shadow: none;
+            border: none;
+
+            color: var(--text-color);
+        }
+
+        .show {
+            display: flex;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        body {
+            height: 100vh;
+            background: linear-gradient(to bottom, var(--main-color), var(--sub-color), var(--main-color));
+        }
+
+        body > * {
+            padding : 10px;
+        }
+
+        nav {
+            font-style: var(--navbar-style);
+        }
+
+        .logo-text {
+            display: flex;
+        }
+
+        .logo {
+            height: 30px;
+            margin-right: 5px;
+        }
+
+        main {
+            height: calc(100vh - 70px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+    </style>
+
+    <!-- STYLE PROPRE À LA PAGE -->
     <link rel="stylesheet" href="styles/style.css">
 
 </head>
@@ -19,24 +81,24 @@
     <!-- NAVBAR -->
     <nav>
         <a class="logo-text" href="index.html">
-            
+
             <!-- WEBSITE LOGO -->
-            <img class="logo" src="img/logo.svg" alt="Logo">
-            
-            <!-- WEBSITE NAME -->
-            <h1>TEMPLATE</h1>
+            <img class="logo" src="logo.svg" alt="Logo">
+
+            <!-- WEBSITE NAME (mis à jour par config.js depuis settings.json) -->
+            <h1 id="site-name">TEMPLATE</h1>
         </a>
     </nav>
     <main>
         <!-- START -->
 
-        
+
 
         <!-- END -->
     </main>
 
     <!-- SCRIPTS -->
-    <script src="scripts/version.js"></script>
+    <script src="scripts/release.js"></script>
 
     <!-- END OF SCRIPTS -->
 </body>
