@@ -39,7 +39,7 @@ async function show_version() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const [last] = await response.json();
         console.log(last
-            ? `current_version => ${last.commit.message}`
+            ? `version ${last.commit.message}`
             : "Aucun commit trouvé.");
     } catch (error) {
         console.error("Erreur lors de la récupération des commits :", error.message);
