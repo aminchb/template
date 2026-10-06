@@ -1,14 +1,15 @@
 {
   "repo": {
     "owner": "aminchb",
-    "name": "template"
+    "name": "template",
+    "version": "2.0.2",
+    "commit": "release.js major refactoring",
+    "todo": ""
   },
   "theme": {
     "mainColor": "#dde2e7",
     "subColor": "#eee",
     "textColor": "black",
     "navbarStyle": "italic"
-  },
-  "version": "2.0.1",
-  "comment": "minor structure fixes"
+  }
 }

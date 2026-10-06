@@ -1,930 +1,199 @@
-// VERSION / RELEASE :
-// Navigateur -> affiche la version courante en console (settings.json + dernier commit GitHub).
-// PC (Node)   -> valide les entrées, incrémente version + commentaire dans settings.json,
-//                push git, puis ouvre la page GitHub Pages et la page de déploiements GitHub.
+// RELEASE :
+// Navigateur -> applique le thème et affiche version / commit / todo en console.
+// PC (Node)  -> demande version, commit, todo, met à jour settings.json,
+//               push git (avec retry si user.email manque), ouvre les pages GitHub.
 //
-// Usage PC :
-//   node release.js
-//
-// ou directement :
-//   node release.js <version> "<commentaire>"
-//
-// Exemples :
-//   node release.js
-//   node release.js 1.0.2 "Fix navbar bug"
-
-
-const SETTINGS_PATH = "settings.json";
-
+// Usage PC : node release.js
 
 // ============================================================
-// METHODS (NAVIGATEUR)
+// NAVIGATEUR
 // ============================================================
 
-function applyTheme(theme) {
-    const root = document.documentElement;
+let settings = null;
 
-    root.style.setProperty("--main-color", theme.mainColor);
-    root.style.setProperty("--sub-color", theme.subColor);
-    root.style.setProperty("--text-color", theme.textColor);
-    root.style.setProperty("--navbar-style", theme.navbarStyle);
+async function load_settings() {
+    const response = await fetch("settings.json");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    settings = await response.json();
 }
 
+function customize() {
+    const { mainColor, subColor, textColor, navbarStyle } = settings.theme;
+    const root = document.documentElement.style;
+    const name = settings.repo.name.toUpperCase();
 
-function applyRepoInfo(repo) {
-    const displayName = repo.name.toUpperCase();
+    root.setProperty("--main-color", mainColor);
+    root.setProperty("--sub-color", subColor);
+    root.setProperty("--text-color", textColor);
+    root.setProperty("--navbar-style", navbarStyle);
 
-    document.title = displayName;
-
+    document.title = name;
     const siteName = document.getElementById("site-name");
+    if (siteName) siteName.textContent = name;
+}
 
-    if (siteName) {
-        siteName.textContent = displayName;
+async function show_version() {
+    const { owner, name, version, commit, todo } = settings.repo;
+    try {
+        const response = await fetch(`https://api.github.com/repos/${owner}/${name}/commits?per_page=1`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const [last] = await response.json();
+        console.log(last
+            ? `Version ${version} (commit ${last.sha.slice(0, 7)} : ${last.commit.message})`
+            : "Aucun commit trouvé.");
+        if (commit) console.log(`Release : ${commit}`);
+        if (todo) console.log(`TODO : ${todo}`);
+    } catch (error) {
+        console.error("Erreur lors de la récupération des commits :", error.message);
     }
 }
 
-
-function buildUrls(repo) {
-    return {
-        website_url: `https://${repo.owner}.github.io/${repo.name}/`,
-        deployments_url: `https://github.com/${repo.owner}/${repo.name}/deployments`,
-        apiUrl: `https://api.github.com/repos/${repo.owner}/${repo.name}/commits`
-    };
+async function main() {
+    try {
+        await load_settings();
+        customize();
+        await show_version();
+    } catch (error) {
+        console.error("Erreur d'initialisation :", error.message);
+    }
 }
-
-
-function logVersion(settings, apiUrl) {
-    fetch(apiUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`GitHub API : HTTP ${response.status}`);
-            }
-
-            return response.json();
-        })
-        .then(data => {
-            if (Array.isArray(data) && data.length > 0) {
-
-                const shortSha = data[0].sha.slice(0, 7);
-
-                console.log(
-                    `Version : ${settings.version} ` +
-                    `(commit ${shortSha} : "${data[0].commit.message}")`
-                );
-
-                if (settings.comment) {
-                    console.log(
-                        `Commentaire de release : ${settings.comment}`
-                    );
-                }
-
-            } else {
-                console.log("Aucun commit trouvé.");
-            }
-        })
-        .catch(error => {
-            console.error(
-                "Erreur lors de la récupération des commits :",
-                error.message
-            );
-        });
-}
-
-
-function page_load() {
-    console.log("PAGE LOAD : OK.");
-
-    fetch(SETTINGS_PATH)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(
-                    `Impossible de charger ${SETTINGS_PATH} : HTTP ${response.status}`
-                );
-            }
-
-            return response.json();
-        })
-        .then(settings => {
-
-            // Vérification minimale de settings.json
-            if (!settings || typeof settings !== "object") {
-                throw new Error("settings.json est invalide.");
-            }
-
-            if (!settings.repo || typeof settings.repo !== "object") {
-                throw new Error("settings.repo est absent ou invalide.");
-            }
-
-            if (!settings.theme || typeof settings.theme !== "object") {
-                throw new Error("settings.theme est absent ou invalide.");
-            }
-
-            console.log("REPO : " + settings.repo.name);
-
-            applyTheme(settings.theme);
-            applyRepoInfo(settings.repo);
-
-            const { apiUrl } = buildUrls(settings.repo);
-
-            logVersion(settings, apiUrl);
-        })
-        .catch(error => {
-            console.error(
-                "Erreur lors du chargement de settings.json :",
-                error.message
-            );
-        });
-}
-
 
 // ============================================================
-// METHODS (PC / NODE)
+// PC (NODE)
 // ============================================================
 
-
-// Format strict : x.y.z
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+let rl = null;
 
-function isValidVersion(version) {
-    return (
-        typeof version === "string" &&
-        VERSION_PATTERN.test(version.trim())
-    );
+function ask(question) {
+    return new Promise(resolve => rl.question(question, answer => resolve(answer.trim())));
 }
 
-
-function isValidComment(commentaire) {
-    return (
-        typeof commentaire === "string" &&
-        commentaire.trim().length > 0
-    );
+// 1.0.0 -> 1.0.1
+function bump(version) {
+    const [major, minor, patch] = version.split(".");
+    return `${major}.${minor}.${Number(patch) + 1}`;
 }
 
+// y / Enter : incrémente | n : garde l'ancienne (si valide) | autre : nouvelle version x.y.z
+async function ask_version(current) {
+    const valid = VERSION_PATTERN.test(current);
+    const next = valid ? bump(current) : "1.0.0";
 
-function incrementPatch(version) {
-    if (!isValidVersion(version)) {
-        return null;
-    }
-
-    const parts = version
-        .trim()
-        .split(".")
-        .map(Number);
-
-    parts[2] += 1;
-
-    return parts.join(".");
-}
-
-
-function ask(rl, question) {
-    return new Promise(resolve => {
-        rl.question(question, answer => {
-            resolve(answer.trim());
-        });
-    });
-}
-
-
-// Pose la question tant que la réponse n'est pas valide.
-async function askUntilValid(
-    rl,
-    question,
-    isValid,
-    invalidMessage
-) {
     while (true) {
+        const answer = await ask(`incrémenter version : (${valid ? current : "null"}) -> (${next}) (y/n/input) `);
+        const lower = answer.toLowerCase();
 
-        const answer = await ask(rl, question);
+        if (lower === "" || lower === "y") return next;
+        if (lower === "n") {
+            if (valid) return current;
+            console.log("Aucune version précédente : saisis une version x.y.z ou y.");
+        } else if (VERSION_PATTERN.test(answer)) {
+            return answer;
+        } else {
+            console.log("Format invalide (x.y.z attendu).");
+        }
+    }
+}
 
-        if (isValid(answer)) {
+// y / Enter : garde la valeur actuelle | autre : nouvelle valeur
+// "-" : vide la valeur (autorisé seulement si allowEmpty)
+async function ask_keep(label, current, allowEmpty) {
+    while (true) {
+        const answer = await ask(`${label}: "${current}" (y/input${allowEmpty ? ", - pour vider" : ""}) `);
+        const lower = answer.toLowerCase();
+
+        if (lower === "" || lower === "y") {
+            if (current || allowEmpty) return current;
+            console.log(`${label} ne peut pas être vide.`);
+        } else if (answer === "-" && allowEmpty) {
+            return "";
+        } else {
             return answer;
         }
-
-        console.log(invalidMessage);
     }
 }
 
+const git = (...args) =>
+    require("child_process").execFileSync("git", args, { encoding: "utf8", stdio: "pipe" }).trim();
 
-// ============================================================
-// RELEASE PROMPT
-// ============================================================
-
-async function promptRelease(currentVersion) {
-
-    const readline = require("readline");
-
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-
-    // --------------------------------------------------------
-    // VERSION
-    // --------------------------------------------------------
-
-    // Une version est considérée valide uniquement si elle
-    // respecte exactement x.y.z.
-    const hasValidCurrent = isValidVersion(currentVersion);
-
-    // Ce qui sera affiché à l'utilisateur.
-    const displayCurrent = hasValidCurrent
-        ? currentVersion.trim()
-        : "null";
-
-
-    // Si aucune version valide n'existe :
-    // null -> 1.0.0
-    //
-    // Sinon :
-    // 1.0.1 -> 1.0.2
-    const suggested = hasValidCurrent
-        ? incrementPatch(currentVersion)
-        : "1.0.0";
-
-
-    let version;
-
-
-    while (true) {
-
-        const answer = await ask(
-            rl,
-            `version: (${displayCurrent}) -> (${suggested}) ? (y/n) `
-        );
-
-        const normalized = answer.toLowerCase();
-
-
-        // ----------------------------------------------------
-        // ENTER / Y / YES
-        // ----------------------------------------------------
-
-        if (
-            normalized === "" ||
-            normalized === "y" ||
-            normalized === "yes"
-        ) {
-            version = suggested;
-            break;
-        }
-
-
-        // ----------------------------------------------------
-        // N / NO
-        // ----------------------------------------------------
-
-        if (
-            normalized === "n" ||
-            normalized === "no"
-        ) {
-            version = await askUntilValid(
-                rl,
-                "Nouvelle version (format x.y.z, ex: 1.0.1) : ",
-                isValidVersion,
-                "Format invalide. Utilise x.y.z (ex: 1.0.1)."
-            );
-
-            break;
-        }
-
-
-        // ----------------------------------------------------
-        // VERSION DIRECTEMENT SAISIE
-        // ----------------------------------------------------
-
-        if (isValidVersion(answer)) {
-            version = answer;
-            break;
-        }
-
-
-        // ----------------------------------------------------
-        // ENTRÉE INVALIDE
-        // ----------------------------------------------------
-
-        console.log(
-            `Entrée "${answer}" non reconnue.`
-        );
-
-        console.log(
-            "Réponds par y/n ou entre directement une version x.y.z."
-        );
+function git_release(message) {
+    git("add", "-A");
+    try {
+        git("diff", "--cached", "--quiet");   // code 0 = rien à commiter
+    } catch {
+        git("commit", "-m", message);
     }
-
-
-    // Double vérification de sécurité.
-    if (!isValidVersion(version)) {
-        rl.close();
-
-        throw new Error(
-            `Version invalide après validation : "${version}"`
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // COMMENTAIRE
-    // --------------------------------------------------------
-
-    const commentaire = await askUntilValid(
-        rl,
-        "comment : ",
-        isValidComment,
-        "Le commentaire ne peut pas être vide, null ou composé uniquement d'espaces."
-    );
-
-
-    // Double vérification de sécurité.
-    if (!isValidComment(commentaire)) {
-        rl.close();
-
-        throw new Error(
-            "Commentaire invalide après validation."
-        );
-    }
-
-
-    rl.close();
-
-
-    return {
-        version: version.trim(),
-        commentaire: commentaire.trim()
-    };
+    git("push");
 }
 
+const git_error = error => (error.stderr || error.message || "").toString().trim();
 
-// ============================================================
-// SETTINGS.JSON
-// ============================================================
+function open_urls({ owner, name }) {
+    const opener = { win32: 'start ""', darwin: "open" }[process.platform] || "xdg-open";
+    [`https://${owner}.github.io/${name}/`, `https://github.com/${owner}/${name}/deployments`]
+        .forEach(url => require("child_process").exec(`${opener} "${url}"`));
+}
 
-function readSettings(settingsPath) {
-
+async function release() {
     const fs = require("fs");
+    const file = require("path").join(__dirname, "settings.json");
+    const original = fs.readFileSync(file, "utf8");
+    const data = JSON.parse(original);
+    const repo = data.repo;
 
-    if (!fs.existsSync(settingsPath)) {
-        throw new Error(
-            `Fichier introuvable : ${settingsPath}`
-        );
-    }
+    if (!repo || !repo.owner || !repo.name) throw new Error("settings.repo.owner / name manquant.");
 
-
-    let content;
-
-    try {
-        content = fs.readFileSync(
-            settingsPath,
-            "utf8"
-        );
-    } catch (error) {
-        throw new Error(
-            `Impossible de lire ${settingsPath} : ${error.message}`
-        );
-    }
-
-
-    let settings;
+    rl = require("readline").createInterface({ input: process.stdin, output: process.stdout });
 
     try {
-        settings = JSON.parse(content);
-    } catch (error) {
-        throw new Error(
-            `${settingsPath} contient un JSON invalide : ${error.message}`
-        );
-    }
-
-
-    if (!settings || typeof settings !== "object") {
-        throw new Error(
-            `${settingsPath} doit contenir un objet JSON.`
-        );
-    }
-
-
-    return settings;
-}
-
-
-function updateSettings(
-    settingsPath,
-    version,
-    commentaire
-) {
-
-    const fs = require("fs");
-
-
-    // --------------------------------------------------------
-    // VALIDATION AVANT MODIFICATION
-    // --------------------------------------------------------
-
-    if (!isValidVersion(version)) {
-        throw new Error(
-            `Impossible de modifier settings.json : version invalide "${version}".`
-        );
-    }
-
-
-    if (!isValidComment(commentaire)) {
-        throw new Error(
-            "Impossible de modifier settings.json : commentaire invalide."
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // LECTURE
-    // --------------------------------------------------------
-
-    const settings = readSettings(settingsPath);
-
-
-    // --------------------------------------------------------
-    // MODIFICATION EN MÉMOIRE
-    // --------------------------------------------------------
-
-    settings.version = version.trim();
-    settings.comment = commentaire.trim();
-
-
-    // --------------------------------------------------------
-    // ÉCRITURE
-    // --------------------------------------------------------
-
-    try {
-
-        fs.writeFileSync(
-            settingsPath,
-            JSON.stringify(settings, null, 2) + "\n",
-            "utf8"
-        );
-
-    } catch (error) {
-
-        throw new Error(
-            `Impossible d'écrire ${settingsPath} : ${error.message}`
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // VÉRIFICATION APRÈS ÉCRITURE
-    // --------------------------------------------------------
-
-    const savedSettings = readSettings(settingsPath);
-
-
-    if (savedSettings.version !== version.trim()) {
-        throw new Error(
-            "Vérification échouée : la version enregistrée ne correspond pas."
-        );
-    }
-
-
-    if (savedSettings.comment !== commentaire.trim()) {
-        throw new Error(
-            "Vérification échouée : le commentaire enregistré ne correspond pas."
-        );
-    }
-
-
-    console.log(
-        `settings.json mis à jour : version=${savedSettings.version}, comment="${savedSettings.comment}"`
-    );
-
-
-    return savedSettings;
-}
-
-
-// ============================================================
-// GIT
-// ============================================================
-
-function run(cmd, args) {
-
-    const { execFileSync } = require("child_process");
-
-    try {
-
-        execFileSync(
-            cmd,
-            args,
-            {
-                stdio: "inherit"
-            }
-        );
-
-    } catch (error) {
-
-        throw new Error(
-            `La commande "${cmd} ${args.join(" ")}" a échoué.`
-        );
-    }
-}
-
-
-function gitRelease(version, commentaire) {
-
-    const commitMessage =
-        `${version} : ${commentaire}`;
-
-
-    // --------------------------------------------------------
-    // GIT ADD
-    // --------------------------------------------------------
-
-    console.log("\n[1/3] git add");
-
-    run("git", [
-        "add",
-        "."
-    ]);
-
-
-    // --------------------------------------------------------
-    // GIT COMMIT
-    // --------------------------------------------------------
-
-    console.log("\n[2/3] git commit");
-
-    run("git", [
-        "commit",
-        "-m",
-        commitMessage
-    ]);
-
-
-    // --------------------------------------------------------
-    // GIT PUSH
-    // --------------------------------------------------------
-
-    console.log("\n[3/3] git push");
-
-    run("git", [
-        "push"
-    ]);
-
-
-    console.log(
-        `\nRelease "${commitMessage}" poussée avec succès.`
-    );
-}
-
-
-// ============================================================
-// OPEN URLS
-// ============================================================
-
-function openUrls(repo) {
-
-    if (
-        !repo ||
-        typeof repo.owner !== "string" ||
-        repo.owner.trim() === "" ||
-        typeof repo.name !== "string" ||
-        repo.name.trim() === ""
-    ) {
-        throw new Error(
-            "Impossible d'ouvrir les URLs : repo.owner ou repo.name est invalide."
-        );
-    }
-
-
-    const {
-        website_url,
-        deployments_url
-    } = buildUrls(repo);
-
-
-    const { exec } = require("child_process");
-
-    const platform = process.platform;
-
-
-    const opener =
-        platform === "win32"
-            ? "start"
-            : platform === "darwin"
-                ? "open"
-                : "xdg-open";
-
-
-    console.log("\nOuverture de :");
-    console.log(`- ${website_url}`);
-    console.log(`- ${deployments_url}`);
-
-
-    exec(
-        `${opener} "${website_url}"`,
-        error => {
-            if (error) {
-                console.error(
-                    "Impossible d'ouvrir la page GitHub Pages :",
-                    error.message
-                );
-            }
-        }
-    );
-
-
-    exec(
-        `${opener} "${deployments_url}"`,
-        error => {
-            if (error) {
-                console.error(
-                    "Impossible d'ouvrir la page des déploiements :",
-                    error.message
-                );
-            }
-        }
-    );
-}
-
-
-// ============================================================
-// MAIN
-// ============================================================
-
-async function check() {
-
-    const path = require("path");
-
-
-    // --------------------------------------------------------
-    // LOCALISATION DE SETTINGS.JSON
-    // --------------------------------------------------------
-
-    const settingsPath = path.join(
-        __dirname,
-        SETTINGS_PATH
-    );
-
-
-    console.log("=================================");
-    console.log("        RELEASE SCRIPT");
-    console.log("=================================\n");
-
-
-    // --------------------------------------------------------
-    // LECTURE ET VALIDATION DU SETTINGS
-    // --------------------------------------------------------
-
-    let currentSettings;
-
-    try {
-
-        currentSettings = readSettings(
-            settingsPath
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Erreur settings.json :",
-            error.message
-        );
-
-        process.exit(1);
-    }
-
-
-    // --------------------------------------------------------
-    // VALIDATION DU REPO AVANT DE COMMENCER
-    // --------------------------------------------------------
-
-    if (
-        !currentSettings.repo ||
-        typeof currentSettings.repo !== "object"
-    ) {
-        console.error(
-            "Erreur : settings.repo est absent ou invalide."
-        );
-
-        process.exit(1);
-    }
-
-
-    if (
-        typeof currentSettings.repo.owner !== "string" ||
-        currentSettings.repo.owner.trim() === ""
-    ) {
-        console.error(
-            "Erreur : settings.repo.owner est absent ou vide."
-        );
-
-        process.exit(1);
-    }
-
-
-    if (
-        typeof currentSettings.repo.name !== "string" ||
-        currentSettings.repo.name.trim() === ""
-    ) {
-        console.error(
-            "Erreur : settings.repo.name est absent ou vide."
-        );
-
-        process.exit(1);
-    }
-
-
-    // --------------------------------------------------------
-    // ARGUMENTS CLI
-    // --------------------------------------------------------
-
-    const [
-        ,
-        ,
-        versionArg,
-        commentaireArg
-    ] = process.argv;
-
-
-    let version = versionArg;
-    let commentaire = commentaireArg;
-
-
-    // --------------------------------------------------------
-    // MODE INTERACTIF
-    // --------------------------------------------------------
-
-    if (!version || !commentaire) {
+        // --- Questions (rien n'est écrit tant que tout n'est pas répondu) ---
+        repo.version = await ask_version(String(repo.version ?? ""));
+        repo.commit = await ask_keep("commit", String(repo.commit ?? ""), false);
+        repo.todo = await ask_keep("todo", String(repo.todo ?? ""), true);
+
+        // --- Écriture + git (restauration du fichier si git échoue) ---
+        const message = `v${repo.version} : ${repo.commit}`;
+        const headBefore = git("rev-parse", "HEAD");
+        fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 
         try {
-
-            ({
-                version,
-                commentaire
-            } = await promptRelease(
-                currentSettings.version
-            ));
-
+            git_release(message);
         } catch (error) {
-
-            console.error(
-                "\nErreur pendant la saisie :",
-                error.message
-            );
-
-            process.exit(1);
+            console.error("Git a échoué :", git_error(error));
+            const email = await ask("user.email git (nouvelle tentative) : ");
+            try {
+                if (!email) throw new Error("email vide");
+                git("config", "user.email", email);
+                git_release(message);
+            } catch (retryError) {
+                if (git("rev-parse", "HEAD") === headBefore) {
+                    fs.writeFileSync(file, original);
+                    console.error("settings.json restauré.");
+                } else {
+                    console.error("Un commit local existe mais le push a échoué : relance `git push`.");
+                }
+                throw new Error(git_error(retryError));
+            }
         }
+    } finally {
+        rl.close();
     }
 
-
-    // --------------------------------------------------------
-    // VALIDATION FINALE AVANT TOUTE MODIFICATION
-    // --------------------------------------------------------
-
-    if (!isValidVersion(version)) {
-
-        console.error(
-            `Version invalide : "${version}"`
-        );
-
-        console.error(
-            "Format attendu : x.y.z"
-        );
-
-        process.exit(1);
-    }
-
-
-    if (!isValidComment(commentaire)) {
-
-        console.error(
-            "Commentaire invalide : il ne peut pas être vide."
-        );
-
-        process.exit(1);
-    }
-
-
-    version = version.trim();
-    commentaire = commentaire.trim();
-
-
-    console.log("\n---------------------------------");
-    console.log("Release validée :");
-    console.log(`Version    : ${version}`);
-    console.log(`Commentaire: ${commentaire}`);
-    console.log("---------------------------------\n");
-
-
-    // --------------------------------------------------------
-    // ÉTAPE 1 : SETTINGS.JSON
-    // --------------------------------------------------------
-
-    let settings;
-
-    try {
-
-        console.log("[ÉTAPE 1/3] Mise à jour de settings.json...");
-
-        settings = updateSettings(
-            settingsPath,
-            version,
-            commentaire
-        );
-
-        console.log(
-            "✓ settings.json validé.\n"
-        );
-
-    } catch (error) {
-
-        console.error(
-            "✗ Échec de la mise à jour de settings.json :",
-            error.message
-        );
-
-        process.exit(1);
-    }
-
-
-    // --------------------------------------------------------
-    // ÉTAPE 2 : GIT
-    // --------------------------------------------------------
-
-    try {
-
-        console.log("[ÉTAPE 2/3] Publication Git...");
-
-        gitRelease(
-            version,
-            commentaire
-        );
-
-        console.log(
-            "✓ Git terminé avec succès.\n"
-        );
-
-    } catch (error) {
-
-        console.error(
-            "✗ Échec Git :",
-            error.message
-        );
-
-        console.error(
-            "\nLes pages ne seront pas ouvertes."
-        );
-
-        process.exit(1);
-    }
-
-
-    // --------------------------------------------------------
-    // ÉTAPE 3 : OUVERTURE DES PAGES
-    // --------------------------------------------------------
-
-    try {
-
-        console.log("[ÉTAPE 3/3] Ouverture des pages...");
-
-        openUrls(
-            settings.repo
-        );
-
-        console.log(
-            "✓ Release terminée avec succès."
-        );
-
-    } catch (error) {
-
-        console.error(
-            "✗ Impossible d'ouvrir les pages :",
-            error.message
-        );
-
-        process.exit(1);
-    }
+    open_urls(repo);
+    console.log("Release terminée.");
 }
-
 
 // ============================================================
 // CALLS
 // ============================================================
 
-if (
-    typeof window !== "undefined" &&
-    typeof window.document !== "undefined"
-) {
-
-    page_load();
-
+if (typeof window !== "undefined" && typeof window.document !== "undefined") {
+    main();
 } else {
-
-    check().catch(error => {
-
-        console.error(
-            "Erreur inattendue :",
-            error.message
-        );
-
+    release().catch(error => {
+        console.error("Erreur :", error.message);
         process.exit(1);
     });
 }
