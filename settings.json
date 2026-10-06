@@ -2,8 +2,8 @@
   "repo": {
     "owner": "aminchb",
     "name": "template",
-    "version": "2.0.4",
-    "commit": "release.js urls order fix",
+    "version": "2.0.5",
+    "commit": "release.js -> minor console fix + urls order test",
     "todo": ""
   },
   "theme": {

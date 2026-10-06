@@ -39,7 +39,7 @@ async function show_version() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const [last] = await response.json();
         console.log(last
-            ? `version : ${version} (commit ${last.sha.slice(0, 7)} : ${last.commit.message})`
+            ? `current_version => ${last.commit.message}`
             : "Aucun commit trouvé.");
     } catch (error) {
         console.error("Erreur lors de la récupération des commits :", error.message);
@@ -130,7 +130,7 @@ const git_error = error => (error.stderr || error.message || "").toString().trim
 
 function open_urls({ owner, name }) {
     const opener = { win32: 'start ""', darwin: "open" }[process.platform] || "xdg-open";
-    [`https://github.com/${owner}/${name}/deployments`,`https://${owner}.github.io/${name}/`]
+    [`https://${owner}.github.io/${name}/`,`https://github.com/${owner}/${name}/deployments`]
         .forEach(url => require("child_process").exec(`${opener} "${url}"`));
 }
 
