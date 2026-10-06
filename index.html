@@ -16,6 +16,10 @@
             scroll-behavior: smooth;
         }
 
+        html, body {
+            height: 100%;
+        }
+
         * {
             margin: 0px;
             padding: 0px;
@@ -23,8 +27,11 @@
             text-decoration: none;
             box-shadow: none;
             border: none;
+        }
 
-            color: var(--text-color);
+        a {
+            color: inherit;
+            text-decoration: none;
         }
 
         .show {
@@ -36,8 +43,11 @@
         }
 
         body {
-            height: 100vh;
+            min-height: 100vh;
             background: linear-gradient(to bottom, var(--main-color), var(--sub-color), var(--main-color));
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
         }
 
         body > * {
@@ -46,6 +56,7 @@
 
         nav {
             font-style: var(--navbar-style);
+            max-height: 70px;
         }
 
         .logo-text {
@@ -57,13 +68,26 @@
             margin-right: 5px;
         }
 
-        main {
-            height: calc(100vh - 70px);
+        main {   
+            flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
             flex-wrap: wrap;
         }
+
+        footer {
+            max-height: 70px;
+            margin-top: auto;
+
+            text-align: center;
+            font-size: small;
+            color: #888;
+            font-style: italic;
+            background-color: #000;
+            border-top: 1px solid #888;
+        }
+
     </style>
 
     <!-- STYLE PROPRE À LA PAGE -->
@@ -89,6 +113,10 @@
 
         <!-- END -->
     </main>
+    <footer>
+        <p id="footer-name"></p>
+        <a id="credits"></a>
+    </footer>
 
     <!-- SCRIPTS -->
     <script src="release.js"></script>

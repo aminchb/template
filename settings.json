@@ -2,14 +2,14 @@
   "repo": {
     "owner": "aminchb",
     "name": "template",
-    "version": "2.0.6",
-    "commit": "release.js -> minor fixes",
+    "version": "3.0.0",
+    "commit": "release.js + index.html -> local preview + footer",
     "todo": ""
   },
   "theme": {
-    "mainColor": "#dde2e7",
+    "mainColor": "black",
     "subColor": "#eee",
-    "textColor": "black",
+    "textColor": "white",
     "navbarStyle": "italic"
   }
 }

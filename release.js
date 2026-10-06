@@ -9,27 +9,59 @@
 // NAVIGATEUR
 // ============================================================
 
-let settings = null;
+let settings = {
+  "repo": {
+    "owner": "aminchb",
+    "name": "template",
+    "version": "2.0.6",
+    "commit": "release.js -> minor fixes",
+    "todo": ""
+  },
+  "theme": {
+    "mainColor": "black",
+    "subColor": "#102",
+    "textColor": "white",
+    "navbarStyle": "italic"
+  }
+};
 
 async function load_settings() {
-    const response = await fetch("settings.json");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    settings = await response.json();
+    try {
+        const response = await fetch("settings.json");
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        settings = await response.json();
+    } catch {
+
+    }
 }
 
 function customize() {
     const { mainColor, subColor, textColor, navbarStyle } = settings.theme;
+    const { name, version, owner } = settings.repo;
     const root = document.documentElement.style;
-    const name = settings.repo.name.toUpperCase();
-
+    
     root.setProperty("--main-color", mainColor);
     root.setProperty("--sub-color", subColor);
     root.setProperty("--text-color", textColor);
     root.setProperty("--navbar-style", navbarStyle);
 
-    document.title = name;
+    // TITRE DE L'ONGLET 
+    document.title = name.toUpperCase();
+    
+    // Titre NAVBAR
     const siteName = document.getElementById("site-name");
-    if (siteName) siteName.textContent = name;
+    if (siteName) siteName.textContent = name.toUpperCase();
+
+    // Titre FOOTER 
+    const footerName = document.getElementById("footer-name");
+    if (footerName) footerName.textContent = `${name} (v.${version})`;
+    
+    // Credits FOOTER
+    const credits = document.getElementById("credits");
+    if (credits) {
+        credits.textContent = `credits : @${owner}`;
+        credits.href = `https://github.com/${owner}`;
+    }
 }
 
 async function show_version() {
