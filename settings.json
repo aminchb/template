@@ -2,8 +2,8 @@
   "repo": {
     "owner": "aminchb",
     "name": "template",
-    "version": "3.0.1",
-    "commit": "settings.json -> graphic fix",
+    "version": "3.1.0",
+    "commit": "release.js -> use CLI to separate open_urls and commit",
     "todo": ""
   },
   "theme": {

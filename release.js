@@ -1,7 +1,9 @@
 // RELEASE :
 // Navigateur -> applique le thème et affiche version / commit / todo en console.
-// PC (Node)  -> demande version, commit, todo, met à jour settings.json,
-//               push git (avec retry si user.email manque), ouvre les pages GitHub.
+// PC (Node)  -> menu : open | commit
+//               open   : ouvre les pages GitHub (site + deployments).
+//               commit : demande version, commit, todo, met à jour settings.json,
+//                        push git (avec retry si user.email manque), ouvre les pages GitHub.
 //
 // Usage PC : node release.js
 
@@ -118,7 +120,7 @@ async function ask_version(current) {
         if (lower === "" || lower === "y") return next;
         if (lower === "n") {
             if (valid) return current;
-            console.log("Aucune version précédente : saisis une version x.y.z ou y.");
+            console.log("Aucune version précédente : saisis une version x.y.z");
         } else if (VERSION_PATTERN.test(answer)) {
             return answer;
         } else {
@@ -162,11 +164,20 @@ const git_error = error => (error.stderr || error.message || "").toString().trim
 
 function open_urls({ owner, name }) {
     const opener = { win32: 'start ""', darwin: "open" }[process.platform] || "xdg-open";
-    [`https://${owner}.github.io/${name}/`,`https://github.com/${owner}/${name}/deployments`]
-        .forEach(url => require("child_process").exec(`${opener} "${url}"`));
+    const urls = [
+        `https://${owner}.github.io/${name}/`,
+        `https://github.com/${owner}/${name}/deployments`
+    ];
+
+    urls.forEach(url => {
+        console.log(`opening : ${url}`);
+        require("child_process").exec(`${opener} "${url}"`);
+    });
 }
 
-async function release() {
+// Point d'entrée PC : lit settings.json une seule fois, crée un seul rl,
+// demande l'action (open / commit) puis délègue.
+async function CLI() {
     const fs = require("fs");
     const file = require("path").join(__dirname, "settings.json");
     const original = fs.readFileSync(file, "utf8");
@@ -178,37 +189,53 @@ async function release() {
     rl = require("readline").createInterface({ input: process.stdin, output: process.stdout });
 
     try {
-        // --- Questions (rien n'est écrit tant que tout n'est pas répondu) ---
-        repo.version = await ask_version(String(repo.version ?? ""));
-        repo.commit = await ask_keep("commit", String(repo.commit ?? ""), false);
-        repo.todo = await ask_keep("todo", String(repo.todo ?? ""), true);
-
-        // --- Écriture + git (restauration du fichier si git échoue) ---
-        const message = `v${repo.version} : ${repo.commit}`;
-        const headBefore = git("rev-parse", "HEAD");
-        fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
-
-        try {
-            git_release(message);
-        } catch (error) {
-            console.error("Git a échoué :", git_error(error));
-            const email = await ask("user.email git (nouvelle tentative) : ");
-            try {
-                if (!email) throw new Error("email vide");
-                git("config", "user.email", email);
-                git_release(message);
-            } catch (retryError) {
-                if (git("rev-parse", "HEAD") === headBefore) {
-                    fs.writeFileSync(file, original);
-                    console.error("settings.json restauré.");
-                } else {
-                    console.error("Un commit local existe mais le push a échoué : relance `git push`.");
-                }
-                throw new Error(git_error(retryError));
-            }
+        let action;
+        while (true) {
+            const answer = (await ask("What do you want to do ? (open/commit) ")).toLowerCase();
+            if (answer === "" || answer === "open") { action = "open"; break; }
+            if (answer === "commit") { action = "commit"; break; }
+            console.log("Réponse invalide : tape 'open' ou 'commit'.");
         }
+
+        if (action === "open") open_urls(repo);
+        else await release({ fs, file, original, data });
     } finally {
         rl.close();
+    }
+}
+
+// Utilise le rl et les données déjà préparés par CLI() (ne les crée ni ne les ferme).
+async function release({ fs, file, original, data }) {
+    const repo = data.repo;
+
+    // --- Questions (rien n'est écrit tant que tout n'est pas répondu) ---
+    repo.version = await ask_version(String(repo.version ?? ""));
+    repo.commit = await ask_keep("commit", String(repo.commit ?? ""), false);
+    repo.todo = await ask_keep("todo", String(repo.todo ?? ""), true);
+
+    // --- Écriture + git (restauration du fichier si git échoue) ---
+    const message = `v${repo.version} : ${repo.commit}`;
+    const headBefore = git("rev-parse", "HEAD");
+    fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+
+    try {
+        git_release(message);
+    } catch (error) {
+        console.error("Git a échoué :", git_error(error));
+        const email = await ask("user.email git (nouvelle tentative) : ");
+        try {
+            if (!email) throw new Error("email vide");
+            git("config", "user.email", email);
+            git_release(message);
+        } catch (retryError) {
+            if (git("rev-parse", "HEAD") === headBefore) {
+                fs.writeFileSync(file, original);
+                console.error("settings.json restauré.");
+            } else {
+                console.error("Un commit local existe mais le push a échoué : relance `git push`.");
+            }
+            throw new Error(git_error(retryError));
+        }
     }
 
     open_urls(repo);
@@ -222,7 +249,7 @@ async function release() {
 if (typeof window !== "undefined" && typeof window.document !== "undefined") {
     main();
 } else {
-    release().catch(error => {
+    CLI().catch(error => {
         console.error("Erreur :", error.message);
         process.exit(1);
     });
