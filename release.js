@@ -130,7 +130,7 @@ const git_error = error => (error.stderr || error.message || "").toString().trim
 
 function open_urls({ owner, name }) {
     const opener = { win32: 'start ""', darwin: "open" }[process.platform] || "xdg-open";
-    [`https://${owner}.github.io/${name}/`, `https://github.com/${owner}/${name}/deployments`]
+    [`https://github.com/${owner}/${name}/deployments`,`https://${owner}.github.io/${name}/`]
         .forEach(url => require("child_process").exec(`${opener} "${url}"`));
 }
 
