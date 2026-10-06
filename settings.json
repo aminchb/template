@@ -9,6 +9,6 @@
     "textColor": "black",
     "navbarStyle": "italic"
   },
-  "version": "2.0.0",
-  "comment": "new settings.json file"
+  "version": "2.0.1",
+  "comment": "minor structure fixes"
 }
